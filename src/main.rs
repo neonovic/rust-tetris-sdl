@@ -19,51 +19,75 @@ enum Direction {
 }
 
 #[derive(Debug)]
-struct Player {
+enum Shapes {
+    Elko([[u8; 3]; 2]),
+}
+
+#[derive(Debug)]
+struct Piece {
     position: Point,
-    sprite: Rect,
+    shape: Shapes,
+    shape_width: i32,
     speed: i32,
     direction: VecDeque<Direction>,
 }
 
-fn render(
-    canvas: &mut WindowCanvas,
-    color: Color,
-    texture: &Texture,
-    player: &Player,
-) -> Result<(), String> {
+fn render(canvas: &mut WindowCanvas, color: Color, piece: &Piece) -> Result<(), String> {
     canvas.set_draw_color(color);
     canvas.clear();
 
     let (width, height) = canvas.output_size()?;
 
-    // Treat the center of the screen as the (0, 0) coordinate
-    let screen_position = player.position + Point::new(width as i32 / 2, height as i32 / 2);
-    let screen_rect = Rect::from_center(
-        screen_position,
-        player.sprite.width() * 3,
-        player.sprite.height() * 3,
-    );
-    canvas.copy(texture, player.sprite, screen_rect)?;
+    let start_position = piece.position + Point::new(width as i32 / 2, 0)
+        - Point::new(piece.shape_width * 20 / 2, 0);
+
+    canvas.set_draw_color(Color::BLUE);
+    let mut piece_position = start_position;
+    match piece.shape {
+        Shapes::Elko(v) => {
+            for row in v {
+                for point in row {
+                    dbg!(piece_position);
+                    if point == 1 {
+                        canvas.fill_rect(Rect::new(piece_position.x, piece_position.y, 20, 20));
+                    }
+                    piece_position += Point::new(20, 0);
+                }
+                piece_position -= Point::new(piece.shape_width * 20, -20);
+            }
+        }
+    }
 
     canvas.present();
 
     Ok(())
 }
 
+fn update_piece(piece: &mut Piece) {
+    use self::Direction::*;
+    piece.position = match piece.direction.back() {
+        Some(Left) => piece.position.offset(-20, 0),
+        Some(Right) => piece.position.offset(20, 0),
+        Some(Up) => piece.position,
+        Some(Down) => piece.position.offset(0, 20),
+        None => piece.position,
+    };
+    piece.position += Point::new(0, 20);
+}
+
 // Update player a fixed amount based on their speed.
 // WARNING: Calling this function too often or at a variable speed will cause the player's speed
 // to be unpredictable!
-fn update_player(player: &mut Player) {
-    use self::Direction::*;
-    player.position = match player.direction.back() {
-        Some(Left) => player.position.offset(-player.speed, 0),
-        Some(Right) => player.position.offset(player.speed, 0),
-        Some(Up) => player.position.offset(0, -player.speed),
-        Some(Down) => player.position.offset(0, player.speed),
-        None => player.position,
-    }
-}
+// fn update_player(player: &mut Piece) {
+//     use self::Direction::*;
+//     player.position = match player.direction.back() {
+//         Some(Left) => player.position.offset(-player.speed, 0),
+//         Some(Right) => player.position.offset(player.speed, 0),
+//         Some(Up) => player.position.offset(0, -player.speed),
+//         Some(Down) => player.position.offset(0, player.speed),
+//         None => player.position,
+//     }
+// }
 
 fn main() -> Result<(), String> {
     let sdl_context = sdl2::init()?;
@@ -74,7 +98,7 @@ fn main() -> Result<(), String> {
     let _image_context = image::init(InitFlag::PNG | InitFlag::JPG)?;
 
     let window = video_subsystem
-        .window("game tutorial", 800, 600)
+        .window("game tutorial", 400, 800)
         .position_centered()
         .build()
         .expect("could not initialize video subsystem");
@@ -84,18 +108,15 @@ fn main() -> Result<(), String> {
         .build()
         .expect("could not make a canvas");
 
-    let texture_creator = canvas.texture_creator();
-    let texture = texture_creator.load_texture("assets/bardo.png")?;
-
-    let mut player = Player {
+    let mut player = Piece {
         position: Point::new(0, 0),
-        sprite: Rect::new(0, 0, 26, 36),
+        shape: Shapes::Elko([[1, 1, 1], [1, 0, 1]]),
+        shape_width: 3,
         speed: 0,
         direction: VecDeque::new(),
     };
 
     let mut event_pump = sdl_context.event_pump()?;
-    let mut i = 0;
     'running: loop {
         // Handle events
         for event in event_pump.poll_iter() {
@@ -143,14 +164,13 @@ fn main() -> Result<(), String> {
         }
 
         // Update
-        i = (i + 1) % 255;
-        update_player(&mut player);
+        update_piece(&mut player);
 
         // Render
-        render(&mut canvas, Color::RGB(i, 64, 255 - i), &texture, &player)?;
+        render(&mut canvas, Color::BLACK, &player)?;
 
         // Time management!
-        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
+        ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 2));
     }
 
     Ok(())

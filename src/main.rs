@@ -1,13 +1,13 @@
 use sdl2::event::Event;
+use sdl2::image::{self, InitFlag};
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
 use sdl2::render::WindowCanvas;
-// "self" imports the "image" module itself as well as everything else we listed
-use sdl2::image::{self, InitFlag};
 use std::time::Duration;
 
-const PLAYER_MOVEMENT_SPEED: i32 = 5;
+const CANVAS_SIZE: (i32, i32) = (20, 30);
+const BOX_SIZE: i32 = 20;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Direction {
@@ -25,23 +25,22 @@ enum Shapes {
 
 #[derive(Debug)]
 struct Piece {
-    position: Point,
+    position: (i32, i32),
     shape: Shapes,
     shape_width: i32,
-    speed: i32,
     direction: Direction,
     steps: u8,
+}
+
+fn convert_coords_to_point(coords: (i32, i32)) -> Point {
+    Point::new(coords.0 * BOX_SIZE, coords.1 * BOX_SIZE)
 }
 
 fn render(canvas: &mut WindowCanvas, color: Color, piece: &Piece) -> Result<(), String> {
     canvas.set_draw_color(color);
     canvas.clear();
 
-    let (width, _height) = canvas.output_size()?;
-
-    let mut piece_position = piece
-        .position
-        .offset((width as i32 / 2) - (piece.shape_width * 20), 0);
+    let mut piece_position = convert_coords_to_point(piece.position);
 
     canvas.set_draw_color(Color::BLUE);
     match piece.shape {
@@ -50,12 +49,17 @@ fn render(canvas: &mut WindowCanvas, color: Color, piece: &Piece) -> Result<(), 
                 for point in row {
                     if point == 1 {
                         canvas
-                            .fill_rect(Rect::new(piece_position.x, piece_position.y, 20, 20))
+                            .fill_rect(Rect::new(
+                                piece_position.x,
+                                piece_position.y,
+                                BOX_SIZE as u32,
+                                BOX_SIZE as u32,
+                            ))
                             .unwrap();
                     }
-                    piece_position += Point::new(20, 0);
+                    piece_position += Point::new(BOX_SIZE, 0);
                 }
-                piece_position -= Point::new(piece.shape_width * 20, -20);
+                piece_position -= Point::new(piece.shape_width * BOX_SIZE, -BOX_SIZE);
             }
         }
     }
@@ -68,10 +72,10 @@ fn render(canvas: &mut WindowCanvas, color: Color, piece: &Piece) -> Result<(), 
 fn update_piece(piece: &mut Piece) {
     use self::Direction::*;
     piece.position = match piece.direction {
-        Left => piece.position.offset(-20, 0),
-        Right => piece.position.offset(20, 0),
+        Left => (piece.position.0 - 1, piece.position.1),
+        Right => (piece.position.0 + 1, piece.position.1),
         Up => piece.position,
-        Down => piece.position.offset(0, 20),
+        Down => (piece.position.0, piece.position.1 + 1),
         None => piece.position,
     };
     piece.direction = None;
@@ -79,7 +83,7 @@ fn update_piece(piece: &mut Piece) {
     // Only once per 4 game loops we want to update falling of the piece one step down
     piece.steps += 1;
     if piece.steps == 4 {
-        piece.position += Point::new(0, 20);
+        piece.position = (piece.position.0, piece.position.1 + 1);
         piece.steps = 1;
     }
 }
@@ -93,7 +97,11 @@ fn main() -> Result<(), String> {
     let _image_context = image::init(InitFlag::PNG | InitFlag::JPG)?;
 
     let window = video_subsystem
-        .window("game tutorial", 400, 800)
+        .window(
+            "game tutorial",
+            (CANVAS_SIZE.0 * BOX_SIZE) as u32,
+            (CANVAS_SIZE.1 * BOX_SIZE) as u32,
+        )
         .position_centered()
         .build()
         .expect("could not initialize video subsystem");
@@ -104,10 +112,9 @@ fn main() -> Result<(), String> {
         .expect("could not make a canvas");
 
     let mut player = Piece {
-        position: Point::new(0, 0),
+        position: (CANVAS_SIZE.0 / 2 - 2, 0),
         shape: Shapes::Elko([[1, 1, 1], [1, 0, 1]]),
         shape_width: 3,
-        speed: 0,
         direction: Direction::None,
         steps: 1,
     };
@@ -134,7 +141,6 @@ fn main() -> Result<(), String> {
                         Keycode::Down => Some(Direction::Down),
                         _ => None,
                     } {
-                        player.speed = PLAYER_MOVEMENT_SPEED;
                         player.direction = direction;
                     }
                 }

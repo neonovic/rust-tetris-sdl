@@ -11,6 +11,7 @@ const BOX_SIZE: i32 = 20;
 
 struct Gamestate {
     area: [[i32; CANVAS_SIZE.0 as usize]; CANVAS_SIZE.1 as usize],
+    store: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -109,45 +110,128 @@ fn store_piece_to_game_state(piece: &Piece, gamestate: &mut Gamestate) {
     }
 }
 
-fn update_piece(piece: &mut Piece, gamestate: &mut Gamestate) {
-    use self::Direction::*;
-    piece.position = match piece.direction {
-        Left => (piece.position.0 - 1, piece.position.1),
-        Right => (piece.position.0 + 1, piece.position.1),
-        Up => piece.position,
-        Down => (piece.position.0, piece.position.1 + 1),
-        None => piece.position,
-    };
-    piece.direction = None;
-
-    // Only once per 4 game loops we want to update falling of the piece one step down
-    piece.steps += 1;
-    if piece.steps == 4 {
-        piece.position = (piece.position.0, piece.position.1 + 1);
-        piece.steps = 1;
+fn check_pieces_collision_left(piece: &Piece, gamestate: &Gamestate) -> bool {
+    match piece.shape {
+        Shapes::Elko(v) => {
+            for (y, row) in v.iter().enumerate() {
+                if row[0] == 1
+                    && gamestate.area[piece.position.1 as usize + y][piece.position.0 as usize - 1]
+                        == 1
+                {
+                    return true;
+                }
+            }
+        }
     }
+    false
+}
 
+fn check_pieces_collision_down(piece: &Piece, gamestate: &Gamestate) -> bool {
     match piece.shape {
         Shapes::Elko(v) => {
             for (y, row) in v.iter().enumerate() {
                 for (x, p) in row.iter().enumerate() {
-                    if *p == 1 && piece.position.1 as usize + y + 1 >= CANVAS_SIZE.1 as usize - 1
-                        || gamestate.area[piece.position.1 as usize + y + 1]
+                    if *p == 1
+                        && gamestate.area[piece.position.1 as usize + y + 1]
                             [piece.position.0 as usize + x]
                             == 1
                     {
-                        store_piece_to_game_state(piece, gamestate);
-                        piece.position = (CANVAS_SIZE.0 / 2 - 2, 0);
+                        return true;
                     }
                 }
             }
         }
+    }
+    false
+}
+
+fn check_pieces_collision_right(piece: &Piece, gamestate: &Gamestate) -> bool {
+    match piece.shape {
+        Shapes::Elko(v) => {
+            for (y, row) in v.iter().enumerate() {
+                if row[row.len() - 1] == 1
+                    && gamestate.area[piece.position.1 as usize + y]
+                        [piece.position.0 as usize + piece.shape_width as usize]
+                        == 1
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+fn update_piece(piece: &mut Piece, gamestate: &mut Gamestate) {
+    use self::Direction::*;
+    piece.position = match piece.direction {
+        Left => {
+            if piece.position.0 == 0 || check_pieces_collision_left(piece, gamestate) {
+                piece.position
+            } else {
+                (piece.position.0 - 1, piece.position.1)
+            }
+        }
+        Right => {
+            if piece.position.0 + piece.shape_width == CANVAS_SIZE.0
+                || check_pieces_collision_right(piece, gamestate)
+            {
+                piece.position
+            } else {
+                (piece.position.0 + 1, piece.position.1)
+            }
+        }
+        Down => {
+            if piece.position.1 + 2 >= CANVAS_SIZE.1 - 1
+                || check_pieces_collision_down(piece, gamestate)
+            {
+                piece.position
+            } else {
+                (piece.position.0, piece.position.1 + 1)
+            }
+        }
+        Up => piece.position,
+        None => piece.position,
+    };
+    piece.direction = None;
+
+    if !gamestate.store {
+        match piece.shape {
+            Shapes::Elko(v) => {
+                for (y, row) in v.iter().enumerate() {
+                    for (x, p) in row.iter().enumerate() {
+                        if *p == 1
+                            && (piece.position.1 as usize + y >= CANVAS_SIZE.1 as usize - 1
+                                || gamestate.area[piece.position.1 as usize + y + 1]
+                                    [piece.position.0 as usize + x]
+                                    == 1)
+                        {
+                            gamestate.store = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Only once per 4 game loops we want to update falling of the piece one step down
+    piece.steps += 1;
+    if piece.steps == 4 {
+        if gamestate.store {
+            store_piece_to_game_state(piece, gamestate);
+            piece.position = (CANVAS_SIZE.0 / 2 - 2, 0);
+            gamestate.store = false;
+        } else {
+            piece.position = (piece.position.0, piece.position.1 + 1);
+        }
+        piece.steps = 1;
     }
 }
 
 fn main() -> Result<(), String> {
     let mut gamestate = Gamestate {
         area: [[0; CANVAS_SIZE.0 as usize]; CANVAS_SIZE.1 as usize],
+        store: false,
     };
 
     let sdl_context = sdl2::init()?;

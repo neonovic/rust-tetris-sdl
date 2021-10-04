@@ -102,22 +102,30 @@ fn store_piece_to_game_state(piece: &Piece, gamestate: &mut Gamestate) {
 
 fn check_pieces_collision_left(piece: &Piece, gamestate: &Gamestate) -> bool {
     for (y, row) in piece.shape.iter().enumerate() {
-        if row[0] == 1
-            && gamestate.area[piece.position.1 as usize + y][piece.position.0 as usize - 1] == 1
-        {
-            return true;
+        for (x, p) in row.iter().enumerate() {
+            if *p == 1
+                && (piece.position.0 + x as i32 == 0
+                    || gamestate.area[piece.position.1 as usize + y]
+                        [piece.position.0 as usize + x - 1]
+                        == 1)
+            {
+                return true;
+            }
         }
     }
     false
 }
 
-fn check_pieces_collision_down(piece: &Piece, gamestate: &Gamestate) -> bool {
+fn check_pieces_collision_down(piece: &Piece, gamestate: &mut Gamestate) -> bool {
     for (y, row) in piece.shape.iter().enumerate() {
         for (x, p) in row.iter().enumerate() {
             if *p == 1
-                && gamestate.area[piece.position.1 as usize + y + 1][piece.position.0 as usize + x]
-                    == 1
+                && (piece.position.1 as usize + y >= CANVAS_SIZE.1 as usize - 1
+                    || gamestate.area[piece.position.1 as usize + y + 1]
+                        [(piece.position.0 + x as i32) as usize]
+                        == 1)
             {
+                gamestate.store = true;
                 return true;
             }
         }
@@ -127,12 +135,15 @@ fn check_pieces_collision_down(piece: &Piece, gamestate: &Gamestate) -> bool {
 
 fn check_pieces_collision_right(piece: &Piece, gamestate: &Gamestate) -> bool {
     for (y, row) in piece.shape.iter().enumerate() {
-        if row[row.len() - 1] == 1
-            && gamestate.area[piece.position.1 as usize + y]
-                [piece.position.0 as usize + piece.shape_width as usize]
-                == 1
-        {
-            return true;
+        for (x, p) in row.iter().enumerate() {
+            if *p == 1
+                && (piece.position.0 + x as i32 == CANVAS_SIZE.0 - 1
+                    || gamestate.area[piece.position.1 as usize + y]
+                        [(piece.position.0 + x as i32 + 1) as usize]
+                        == 1)
+            {
+                return true;
+            }
         }
     }
     false
@@ -153,25 +164,21 @@ fn update_piece(piece: &mut Piece, gamestate: &mut Gamestate) {
     use self::Direction::*;
     piece.position = match piece.direction {
         Left => {
-            if piece.position.0 == 0 || check_pieces_collision_left(piece, gamestate) {
+            if check_pieces_collision_left(piece, gamestate) {
                 piece.position
             } else {
                 (piece.position.0 - 1, piece.position.1)
             }
         }
         Right => {
-            if piece.position.0 + piece.shape_width == CANVAS_SIZE.0
-                || check_pieces_collision_right(piece, gamestate)
-            {
+            if check_pieces_collision_right(piece, gamestate) {
                 piece.position
             } else {
                 (piece.position.0 + 1, piece.position.1)
             }
         }
         Down => {
-            if piece.position.1 + piece.shape.len() as i32 >= CANVAS_SIZE.1 - 1
-                || check_pieces_collision_down(piece, gamestate)
-            {
+            if check_pieces_collision_down(piece, gamestate) {
                 piece.position
             } else {
                 (piece.position.0, piece.position.1 + 1)
@@ -186,18 +193,7 @@ fn update_piece(piece: &mut Piece, gamestate: &mut Gamestate) {
     piece.direction = None;
 
     if !gamestate.store {
-        for (y, row) in piece.shape.iter().enumerate() {
-            for (x, p) in row.iter().enumerate() {
-                if *p == 1
-                    && (piece.position.1 as usize + y >= CANVAS_SIZE.1 as usize - 1
-                        || gamestate.area[piece.position.1 as usize + y + 1]
-                            [piece.position.0 as usize + x]
-                            == 1)
-                {
-                    gamestate.store = true;
-                }
-            }
-        }
+        check_pieces_collision_down(piece, gamestate);
     }
 
     // Only once per 4 game loops we want to update falling of the piece one step down

@@ -138,6 +138,17 @@ fn check_pieces_collision_right(piece: &Piece, gamestate: &Gamestate) -> bool {
     false
 }
 
+fn rotate(piece: &Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+    let mut piece_rotated: Vec<Vec<u8>> = vec![];
+    for y in 0..piece.len() {
+        piece_rotated.push(vec![]);
+        for x in 0..piece.len() {
+            piece_rotated[y].push(piece[x][piece.len() - 1 - y]);
+        }
+    }
+    piece_rotated
+}
+
 fn update_piece(piece: &mut Piece, gamestate: &mut Gamestate) {
     use self::Direction::*;
     piece.position = match piece.direction {
@@ -166,7 +177,10 @@ fn update_piece(piece: &mut Piece, gamestate: &mut Gamestate) {
                 (piece.position.0, piece.position.1 + 1)
             }
         }
-        Up => piece.position,
+        Up => {
+            piece.shape = rotate(&piece.shape);
+            piece.position
+        }
         None => piece.position,
     };
     piece.direction = None;

@@ -23,15 +23,14 @@ enum Direction {
     None,
 }
 
-#[derive(Debug)]
-enum Shapes {
-    Elko([[u8; 3]; 2]),
+struct Pieces {
+    list: Vec<Vec<Vec<u8>>>,
 }
 
 #[derive(Debug)]
 struct Piece {
     position: (i32, i32),
-    shape: Shapes,
+    shape: Vec<Vec<u8>>,
     shape_width: i32,
     direction: Direction,
     steps: u8,
@@ -53,25 +52,21 @@ fn render(
     let mut piece_position = convert_coords_to_point(piece.position);
 
     canvas.set_draw_color(Color::BLUE);
-    match piece.shape {
-        Shapes::Elko(v) => {
-            for row in v {
-                for point in row {
-                    if point == 1 {
-                        canvas
-                            .fill_rect(Rect::new(
-                                piece_position.x,
-                                piece_position.y,
-                                BOX_SIZE as u32,
-                                BOX_SIZE as u32,
-                            ))
-                            .unwrap();
-                    }
-                    piece_position += Point::new(BOX_SIZE, 0);
-                }
-                piece_position -= Point::new(piece.shape_width * BOX_SIZE, -BOX_SIZE);
+    for row in &piece.shape {
+        for point in row {
+            if *point == 1 {
+                canvas
+                    .fill_rect(Rect::new(
+                        piece_position.x,
+                        piece_position.y,
+                        BOX_SIZE as u32,
+                        BOX_SIZE as u32,
+                    ))
+                    .unwrap();
             }
+            piece_position += Point::new(BOX_SIZE, 0);
         }
+        piece_position -= Point::new(piece.shape_width * BOX_SIZE, -BOX_SIZE);
     }
 
     for (y, row) in gamestate.area.iter().enumerate() {
@@ -96,49 +91,34 @@ fn render(
 }
 
 fn store_piece_to_game_state(piece: &Piece, gamestate: &mut Gamestate) {
-    match piece.shape {
-        Shapes::Elko(v) => {
-            for (y, row) in v.iter().enumerate() {
-                for (x, p) in row.iter().enumerate() {
-                    if *p == 1 {
-                        gamestate.area[piece.position.1 as usize + y]
-                            [piece.position.0 as usize + x] = 1;
-                    }
-                }
+    for (y, row) in piece.shape.iter().enumerate() {
+        for (x, p) in row.iter().enumerate() {
+            if *p == 1 {
+                gamestate.area[piece.position.1 as usize + y][piece.position.0 as usize + x] = 1;
             }
         }
     }
 }
 
 fn check_pieces_collision_left(piece: &Piece, gamestate: &Gamestate) -> bool {
-    match piece.shape {
-        Shapes::Elko(v) => {
-            for (y, row) in v.iter().enumerate() {
-                if row[0] == 1
-                    && gamestate.area[piece.position.1 as usize + y][piece.position.0 as usize - 1]
-                        == 1
-                {
-                    return true;
-                }
-            }
+    for (y, row) in piece.shape.iter().enumerate() {
+        if row[0] == 1
+            && gamestate.area[piece.position.1 as usize + y][piece.position.0 as usize - 1] == 1
+        {
+            return true;
         }
     }
     false
 }
 
 fn check_pieces_collision_down(piece: &Piece, gamestate: &Gamestate) -> bool {
-    match piece.shape {
-        Shapes::Elko(v) => {
-            for (y, row) in v.iter().enumerate() {
-                for (x, p) in row.iter().enumerate() {
-                    if *p == 1
-                        && gamestate.area[piece.position.1 as usize + y + 1]
-                            [piece.position.0 as usize + x]
-                            == 1
-                    {
-                        return true;
-                    }
-                }
+    for (y, row) in piece.shape.iter().enumerate() {
+        for (x, p) in row.iter().enumerate() {
+            if *p == 1
+                && gamestate.area[piece.position.1 as usize + y + 1][piece.position.0 as usize + x]
+                    == 1
+            {
+                return true;
             }
         }
     }
@@ -146,17 +126,13 @@ fn check_pieces_collision_down(piece: &Piece, gamestate: &Gamestate) -> bool {
 }
 
 fn check_pieces_collision_right(piece: &Piece, gamestate: &Gamestate) -> bool {
-    match piece.shape {
-        Shapes::Elko(v) => {
-            for (y, row) in v.iter().enumerate() {
-                if row[row.len() - 1] == 1
-                    && gamestate.area[piece.position.1 as usize + y]
-                        [piece.position.0 as usize + piece.shape_width as usize]
-                        == 1
-                {
-                    return true;
-                }
-            }
+    for (y, row) in piece.shape.iter().enumerate() {
+        if row[row.len() - 1] == 1
+            && gamestate.area[piece.position.1 as usize + y]
+                [piece.position.0 as usize + piece.shape_width as usize]
+                == 1
+        {
+            return true;
         }
     }
     false
@@ -182,7 +158,7 @@ fn update_piece(piece: &mut Piece, gamestate: &mut Gamestate) {
             }
         }
         Down => {
-            if piece.position.1 + 2 >= CANVAS_SIZE.1 - 1
+            if piece.position.1 + piece.shape.len() as i32 >= CANVAS_SIZE.1 - 1
                 || check_pieces_collision_down(piece, gamestate)
             {
                 piece.position
@@ -196,19 +172,15 @@ fn update_piece(piece: &mut Piece, gamestate: &mut Gamestate) {
     piece.direction = None;
 
     if !gamestate.store {
-        match piece.shape {
-            Shapes::Elko(v) => {
-                for (y, row) in v.iter().enumerate() {
-                    for (x, p) in row.iter().enumerate() {
-                        if *p == 1
-                            && (piece.position.1 as usize + y >= CANVAS_SIZE.1 as usize - 1
-                                || gamestate.area[piece.position.1 as usize + y + 1]
-                                    [piece.position.0 as usize + x]
-                                    == 1)
-                        {
-                            gamestate.store = true;
-                        }
-                    }
+        for (y, row) in piece.shape.iter().enumerate() {
+            for (x, p) in row.iter().enumerate() {
+                if *p == 1
+                    && (piece.position.1 as usize + y >= CANVAS_SIZE.1 as usize - 1
+                        || gamestate.area[piece.position.1 as usize + y + 1]
+                            [piece.position.0 as usize + x]
+                            == 1)
+                {
+                    gamestate.store = true;
                 }
             }
         }
@@ -252,9 +224,13 @@ fn main() -> Result<(), String> {
         .build()
         .expect("could not make a canvas");
 
+    let pieces = Pieces {
+        list: vec![vec![vec![0, 1, 0], vec![1, 1, 1], vec![0, 0, 0]]],
+    };
+
     let mut piece = Piece {
         position: (CANVAS_SIZE.0 / 2 - 2, 0),
-        shape: Shapes::Elko([[1, 1, 1], [1, 0, 1]]),
+        shape: pieces.list[0].clone(),
         shape_width: 3,
         direction: Direction::None,
         steps: 1,

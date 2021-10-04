@@ -9,6 +9,10 @@ use std::time::Duration;
 const CANVAS_SIZE: (i32, i32) = (20, 30);
 const BOX_SIZE: i32 = 20;
 
+struct Gamestate {
+    area: [[i32; CANVAS_SIZE.0 as usize]; CANVAS_SIZE.1 as usize],
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Direction {
     Up,
@@ -36,7 +40,12 @@ fn convert_coords_to_point(coords: (i32, i32)) -> Point {
     Point::new(coords.0 * BOX_SIZE, coords.1 * BOX_SIZE)
 }
 
-fn render(canvas: &mut WindowCanvas, color: Color, piece: &Piece) -> Result<(), String> {
+fn render(
+    canvas: &mut WindowCanvas,
+    color: Color,
+    piece: &Piece,
+    gamestate: &Gamestate,
+) -> Result<(), String> {
     canvas.set_draw_color(color);
     canvas.clear();
 
@@ -64,12 +73,43 @@ fn render(canvas: &mut WindowCanvas, color: Color, piece: &Piece) -> Result<(), 
         }
     }
 
+    for (y, row) in gamestate.area.iter().enumerate() {
+        for (x, a) in row.iter().enumerate() {
+            if gamestate.area[y][x] == 1 {
+                let area_point = convert_coords_to_point((x as i32, y as i32));
+                canvas
+                    .fill_rect(Rect::new(
+                        area_point.x,
+                        area_point.y,
+                        BOX_SIZE as u32,
+                        BOX_SIZE as u32,
+                    ))
+                    .unwrap();
+            }
+        }
+    }
+
     canvas.present();
 
     Ok(())
 }
 
-fn update_piece(piece: &mut Piece) {
+fn store_piece_to_game_state(piece: &Piece, gamestate: &mut Gamestate) {
+    match piece.shape {
+        Shapes::Elko(v) => {
+            for (y, row) in v.iter().enumerate() {
+                for (x, p) in row.iter().enumerate() {
+                    if *p == 1 {
+                        gamestate.area[piece.position.1 as usize + y]
+                            [piece.position.0 as usize + x] = 1;
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn update_piece(piece: &mut Piece, gamestate: &mut Gamestate) {
     use self::Direction::*;
     piece.position = match piece.direction {
         Left => (piece.position.0 - 1, piece.position.1),
@@ -86,15 +126,32 @@ fn update_piece(piece: &mut Piece) {
         piece.position = (piece.position.0, piece.position.1 + 1);
         piece.steps = 1;
     }
+
+    match piece.shape {
+        Shapes::Elko(v) => {
+            for (y, row) in v.iter().enumerate() {
+                for (x, p) in row.iter().enumerate() {
+                    if *p == 1 && piece.position.1 as usize + y + 1 >= CANVAS_SIZE.1 as usize - 1
+                        || gamestate.area[piece.position.1 as usize + y + 1]
+                            [piece.position.0 as usize + x]
+                            == 1
+                    {
+                        store_piece_to_game_state(piece, gamestate);
+                        piece.position = (CANVAS_SIZE.0 / 2 - 2, 0);
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn main() -> Result<(), String> {
+    let mut gamestate = Gamestate {
+        area: [[0; CANVAS_SIZE.0 as usize]; CANVAS_SIZE.1 as usize],
+    };
+
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
-    // Leading "_" tells Rust that this is an unused variable that we don't care about. It has to
-    // stay unused because if we don't have any variable at all then Rust will treat it as a
-    // temporary value and drop it right away!
-    let _image_context = image::init(InitFlag::PNG | InitFlag::JPG)?;
 
     let window = video_subsystem
         .window(
@@ -111,7 +168,7 @@ fn main() -> Result<(), String> {
         .build()
         .expect("could not make a canvas");
 
-    let mut player = Piece {
+    let mut piece = Piece {
         position: (CANVAS_SIZE.0 / 2 - 2, 0),
         shape: Shapes::Elko([[1, 1, 1], [1, 0, 1]]),
         shape_width: 3,
@@ -141,7 +198,7 @@ fn main() -> Result<(), String> {
                         Keycode::Down => Some(Direction::Down),
                         _ => None,
                     } {
-                        player.direction = direction;
+                        piece.direction = direction;
                     }
                 }
                 _ => {}
@@ -149,10 +206,10 @@ fn main() -> Result<(), String> {
         }
 
         // Update
-        update_piece(&mut player);
+        update_piece(&mut piece, &mut gamestate);
 
         // Render
-        render(&mut canvas, Color::BLACK, &player)?;
+        render(&mut canvas, Color::BLACK, &piece, &gamestate)?;
 
         // Time management!
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 8));

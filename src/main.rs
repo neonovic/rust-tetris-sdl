@@ -1,5 +1,4 @@
 use sdl2::event::Event;
-use sdl2::image::{self, InitFlag};
 use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::rect::{Point, Rect};
@@ -94,7 +93,8 @@ fn store_piece_to_game_state(piece: &Piece, gamestate: &mut Gamestate) {
     for (y, row) in piece.shape.iter().enumerate() {
         for (x, p) in row.iter().enumerate() {
             if *p == 1 {
-                gamestate.area[piece.position.1 as usize + y][piece.position.0 as usize + x] = 1;
+                gamestate.area[(piece.position.1 + y as i32) as usize]
+                    [(piece.position.0 + x as i32) as usize] = 1;
             }
         }
     }
@@ -105,8 +105,8 @@ fn check_pieces_collision_left(piece: &Piece, gamestate: &Gamestate) -> bool {
         for (x, p) in row.iter().enumerate() {
             if *p == 1
                 && (piece.position.0 + x as i32 == 0
-                    || gamestate.area[piece.position.1 as usize + y]
-                        [piece.position.0 as usize + x - 1]
+                    || gamestate.area[(piece.position.1 + y as i32) as usize]
+                        [(piece.position.0 + x as i32 - 1) as usize]
                         == 1)
             {
                 return true;
@@ -121,7 +121,7 @@ fn check_pieces_collision_down(piece: &Piece, gamestate: &mut Gamestate) -> bool
         for (x, p) in row.iter().enumerate() {
             if *p == 1
                 && (piece.position.1 as usize + y >= CANVAS_SIZE.1 as usize - 1
-                    || gamestate.area[piece.position.1 as usize + y + 1]
+                    || gamestate.area[(piece.position.1 + y as i32 + 1) as usize]
                         [(piece.position.0 + x as i32) as usize]
                         == 1)
             {
@@ -138,7 +138,7 @@ fn check_pieces_collision_right(piece: &Piece, gamestate: &Gamestate) -> bool {
         for (x, p) in row.iter().enumerate() {
             if *p == 1
                 && (piece.position.0 + x as i32 == CANVAS_SIZE.0 - 1
-                    || gamestate.area[piece.position.1 as usize + y]
+                    || gamestate.area[(piece.position.1 + y as i32) as usize]
                         [(piece.position.0 + x as i32 + 1) as usize]
                         == 1)
             {
@@ -149,7 +149,7 @@ fn check_pieces_collision_right(piece: &Piece, gamestate: &Gamestate) -> bool {
     false
 }
 
-fn rotate(piece: &Vec<Vec<u8>>) -> Vec<Vec<u8>> {
+fn rotate(piece: &Vec<Vec<u8>>, position: (i32, i32)) -> Option<Vec<Vec<u8>>> {
     let mut piece_rotated: Vec<Vec<u8>> = vec![];
     for y in 0..piece.len() {
         piece_rotated.push(vec![]);
@@ -157,7 +157,15 @@ fn rotate(piece: &Vec<Vec<u8>>) -> Vec<Vec<u8>> {
             piece_rotated[y].push(piece[x][piece.len() - 1 - y]);
         }
     }
-    piece_rotated
+
+    for (y, row) in piece_rotated.iter().enumerate() {
+        for (x, p) in row.iter().enumerate() {
+            if *p == 1 && position.0 + x as i32 <= -1 || position.0 + x as i32 > CANVAS_SIZE.0 - 1 {
+                return None;
+            }
+        }
+    }
+    Some(piece_rotated)
 }
 
 fn update_piece(piece: &mut Piece, gamestate: &mut Gamestate) {
@@ -185,7 +193,9 @@ fn update_piece(piece: &mut Piece, gamestate: &mut Gamestate) {
             }
         }
         Up => {
-            piece.shape = rotate(&piece.shape);
+            if let Some(piece_rotated) = rotate(&piece.shape, piece.position) {
+                piece.shape = piece_rotated;
+            }
             piece.position
         }
         None => piece.position,

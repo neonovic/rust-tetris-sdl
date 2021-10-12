@@ -39,7 +39,15 @@ fn convert_coords_to_point(coords: (i32, i32)) -> Point {
     Point::new(coords.0 * BOX_SIZE, coords.1 * BOX_SIZE)
 }
 
-fn render_piece(canvas: &mut WindowCanvas, piece: &Piece) {
+fn render(
+    canvas: &mut WindowCanvas,
+    color: Color,
+    piece: &Piece,
+    gamestate: &Gamestate,
+) -> Result<(), String> {
+    canvas.set_draw_color(color);
+    canvas.clear();
+
     let mut piece_position = convert_coords_to_point(piece.position);
 
     canvas.set_draw_color(Color::BLUE);
@@ -59,20 +67,6 @@ fn render_piece(canvas: &mut WindowCanvas, piece: &Piece) {
         }
         piece_position -= Point::new(piece.shape_width * BOX_SIZE, -BOX_SIZE);
     }
-}
-
-fn render(
-    canvas: &mut WindowCanvas,
-    color: Color,
-    piece1: &Piece,
-    piece2: &Piece,
-    gamestate: &Gamestate,
-) -> Result<(), String> {
-    canvas.set_draw_color(color);
-    canvas.clear();
-
-    render_piece(canvas, piece1);
-    render_piece(canvas, piece2);
 
     for (y, row) in gamestate.area.iter().enumerate() {
         for (x, a) in row.iter().enumerate() {
@@ -174,7 +168,7 @@ fn rotate(piece: &Vec<Vec<u8>>, position: (i32, i32)) -> Option<Vec<Vec<u8>>> {
     Some(piece_rotated)
 }
 
-fn update_piece(piece: &mut Piece, gamestate: &mut Gamestate, position: &str) {
+fn update_piece(piece: &mut Piece, gamestate: &mut Gamestate) {
     use self::Direction::*;
     piece.position = match piece.direction {
         Left => {
@@ -217,11 +211,7 @@ fn update_piece(piece: &mut Piece, gamestate: &mut Gamestate, position: &str) {
     if piece.steps == 4 {
         if gamestate.store {
             store_piece_to_game_state(piece, gamestate);
-            piece.position = if position == "left" {
-                (CANVAS_SIZE.0 / 3 - 2, 0)
-            } else {
-                (2 * CANVAS_SIZE.0 / 3 - 2, 0)
-            };
+            piece.position = (CANVAS_SIZE.0 / 2 - 2, 0);
             gamestate.store = false;
         } else {
             piece.position = (piece.position.0, piece.position.1 + 1);
@@ -258,16 +248,8 @@ fn main() -> Result<(), String> {
         list: vec![vec![vec![0, 1, 0], vec![1, 1, 1], vec![0, 0, 0]]],
     };
 
-    let mut piece1 = Piece {
-        position: (CANVAS_SIZE.0 / 3 - 2, 0),
-        shape: pieces.list[0].clone(),
-        shape_width: 3,
-        direction: Direction::None,
-        steps: 1,
-    };
-
-    let mut piece2 = Piece {
-        position: (2 * CANVAS_SIZE.0 / 3 - 2, 0),
+    let mut piece = Piece {
+        position: (CANVAS_SIZE.0 / 2 - 2, 0),
         shape: pieces.list[0].clone(),
         shape_width: 3,
         direction: Direction::None,
@@ -289,31 +271,25 @@ fn main() -> Result<(), String> {
                 Event::KeyDown {
                     keycode: Some(k), ..
                 } => {
-                    piece1.direction = match k {
-                        Keycode::Left => Direction::Left,
-                        Keycode::Right => Direction::Right,
-                        Keycode::Up => Direction::Up,
-                        Keycode::Down => Direction::Down,
-                        _ => piece1.direction,
-                    };
-                    piece2.direction = match k {
-                        Keycode::A => Direction::Left,
-                        Keycode::D => Direction::Right,
-                        Keycode::W => Direction::Up,
-                        Keycode::S => Direction::Down,
-                        _ => piece2.direction,
-                    };
+                    if let Some(direction) = match k {
+                        Keycode::Left => Some(Direction::Left),
+                        Keycode::Right => Some(Direction::Right),
+                        Keycode::Up => Some(Direction::Up),
+                        Keycode::Down => Some(Direction::Down),
+                        _ => None,
+                    } {
+                        piece.direction = direction;
+                    }
                 }
                 _ => {}
             }
         }
 
         // Update
-        update_piece(&mut piece1, &mut gamestate, "left");
-        update_piece(&mut piece2, &mut gamestate, "right");
+        update_piece(&mut piece, &mut gamestate);
 
         // Render
-        render(&mut canvas, Color::BLACK, &piece1, &piece2, &gamestate)?;
+        render(&mut canvas, Color::BLACK, &piece, &gamestate)?;
 
         // Time management!
         ::std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 8));
